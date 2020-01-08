@@ -6,6 +6,7 @@ import android.content.Context;
 import android.location.Criteria;
 import android.location.Location;
 import android.location.LocationManager;
+import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Log;
 
@@ -30,7 +31,7 @@ public class LocationUploadWorker extends Worker {
     private static HandlerThread mHandlerThread;
     private static CountDownLatch locationWait;
     private static CountDownLatch dropboxWait;
-    private final static Long MAX_WAIT_TIME_LOCATION_MS = 60000L;
+    private final static Long MAX_WAIT_TIME_LOCATION_MS = 5 * 60 * 1000L;
 
 
     private static String getLocationDataJSONString(String provider, Double lon, Double lat, Long locationAcquisitionTime) {
@@ -59,6 +60,8 @@ public class LocationUploadWorker extends Worker {
         Context context = getApplicationContext();
         LocationManager locationManager = null;
         MyLocationListener locListener = null;
+        Handler locationTimeoutHandler = new Handler(mHandlerThread.getLooper());
+        Runnable locationTimeoutRunnable = null;
         try {
             final String[] data = {null};
             mHandlerThread = new HandlerThread("LocationDropboxThread");
@@ -86,18 +89,17 @@ public class LocationUploadWorker extends Worker {
             });
             locationManager.requestSingleUpdate(bestProvider, locListener, mHandlerThread.getLooper());
 //          GET LOCATION: TIMEOUT FOR LOCATION REQUEST
-            /*final LocationManager finalLocationManager = locationManager;
+            final LocationManager finalLocationManager = locationManager;
             final MyLocationListener finalLocListener = locListener;
-
-            Handler handler = new Handler(mHandlerThread.getLooper());
-            handler.postDelayed(new Runnable() {
+            locationTimeoutRunnable = new Runnable() {
                 public void run() {
                     // STOP AWAITING FOR LOCATION IF TIMEOUT
                     locationWait.countDown();
                     finalLocationManager.removeUpdates(finalLocListener);
 
                 }
-            }, MAX_WAIT_TIME_LOCATION_MS);*/
+            };
+            locationTimeoutHandler.postDelayed(locationTimeoutRunnable, MAX_WAIT_TIME_LOCATION_MS);
             locationWait = new CountDownLatch(1);
             locationWait.await();
             locationManager.removeUpdates(locListener);
@@ -125,23 +127,22 @@ public class LocationUploadWorker extends Worker {
             dropboxWait = new CountDownLatch(1);
             dropboxWait.await();
             Log.d(TAG, "Dropbox Location upload finished: " + System.currentTimeMillis());
+//          END UPLOAD TO DROPBOX
+
+            return Result.success();
         } catch (Exception e) {
             Log.d(TAG, "Dropbox Location failed: " + System.currentTimeMillis());
             e.printStackTrace();
+            return Result.failure();
+        }finally {
             mHandlerThread.getLooper().quit();
             mHandlerThread.quit();
+            if (locationTimeoutRunnable != null) {
+                locationTimeoutHandler.removeCallbacks(locationTimeoutRunnable);
+            }
             if (locationManager != null && locListener != null) {
                 locationManager.removeUpdates(locListener);
             }
-            return Result.failure();
         }
-
-//      DONE
-        mHandlerThread.getLooper().quit();
-        mHandlerThread.quit();
-        return Result.success();
     }
-
-
-
 }
