@@ -58,14 +58,14 @@ public class LocationUploadWorker extends Worker {
     public Result doWork() {
         Log.d(TAG, "Dropbox Location work started");
         Context context = getApplicationContext();
+        mHandlerThread = new HandlerThread("LocationDropboxThread");
+        mHandlerThread.start();
         LocationManager locationManager = null;
         MyLocationListener locListener = null;
         Handler locationTimeoutHandler = new Handler(mHandlerThread.getLooper());
         Runnable locationTimeoutRunnable = null;
         try {
             final String[] data = {null};
-            mHandlerThread = new HandlerThread("LocationDropboxThread");
-            mHandlerThread.start();
 
 //          GET LOCATION
             locationManager = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
